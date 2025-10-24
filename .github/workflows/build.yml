@@ -58,22 +58,23 @@ jobs:
             echo "⚠️ gen-control.sh not found."
           fi
 
-      # 🧩 إصلاح شامل لكل المسارات المتكررة
-      - name: 🔧 Fix Nested Paths
+      # 🧩 إصلاح شامل للمسارات المتكررة (نهائي)
+      - name: 🔧 Fix Nested Paths (final deep clean)
         run: |
-          echo "🔍 Cleaning all nested paths..."
+          echo "🧹 Cleaning nested Polin and ImGui paths deeply..."
           cd TrollSpeed
           FILE="TrollSpeed.xcodeproj/project.pbxproj"
 
           if [ -f "$FILE" ]; then
-            echo "🧹 Fixing all duplicate Polin/Polin paths..."
+            # إزالة كل التكرارات Polin/Polin/... → Polin/
+            perl -pi -e 's|(Polin/){2,}|Polin/|g' "$FILE"
+            perl -pi -e 's|\.\./(Polin/){2,}|\.\./Polin/|g' "$FILE"
             perl -pi -e 's|(Polin/)+ImGui/|Polin/ImGui/|g' "$FILE"
-            perl -pi -e 's|(Polin/)+TrollSpeed/|TrollSpeed/|g' "$FILE"
             perl -pi -e 's|\.\./(Polin/)+ImGui/|\.\./Polin/ImGui/|g' "$FILE"
-            perl -pi -e 's|\.\./(Polin/)+TrollSpeed/|\.\./TrollSpeed/|g' "$FILE"
-            perl -pi -e 's|/work/(Polin/)+TrollSpeed/|/work/TrollSpeed/|g' "$FILE"
-            echo "✅ Paths cleaned successfully!"
-            grep -i "ImGui" "$FILE" | head -15 || true
+
+            echo "✅ All nested Polin/ImGui paths cleaned!"
+            echo "🔍 Preview of fixed lines:"
+            grep -i "ImGui" "$FILE" | head -10 || true
           else
             echo "⚠️ project.pbxproj not found!"
           fi
