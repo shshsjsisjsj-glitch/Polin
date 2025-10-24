@@ -1,17 +1,20 @@
 #!/bin/sh
 
-# This script builds the TrollSpeed app and creates a .tipa package (for TrollStore)
+# ============================================
+# TrollSpeed Auto-Build Script for TrollStore
+# ============================================
+
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <version>"
     exit 1
 fi
 
 VERSION=$1
-VERSION=${VERSION#v} # Remove leading 'v' if present
+VERSION=${VERSION#v}  # Remove leading "v" if present
 
 echo "🚀 Starting build for version: $VERSION"
 
-# Clean and archive using Xcode
+# 🧹 Clean + Build + Archive
 xcodebuild clean build archive \
   -scheme TrollSpeed \
   -project TrollSpeed.xcodeproj \
@@ -20,52 +23,66 @@ xcodebuild clean build archive \
   -archivePath TrollSpeed.xarchive \
   CODE_SIGNING_ALLOWED=NO | xcpretty
 
-# Ensure important files have correct permissions
+# 🧾 Ensure critical files exist and have correct permissions
 chmod 0644 Resources/Info.plist 2>/dev/null || true
 chmod 0644 supports/Sandbox-Info.plist 2>/dev/null || true
 
-# Copy entitlements to archive products (if exist)
+# 🧩 Ensure product structure exists
 mkdir -p TrollSpeed.xarchive/Products || true
-cp supports/entitlements.plist TrollSpeed.xarchive/Products 2>/dev/null || true
+cp supports/entitlements.plist TrollSpeed.xarchive/Products/ 2>/dev/null || true
 
-# 🧩 Ensure Applications folder exists before entering it
-if [ -d "TrollSpeed.xarchive/Products/Applications" ]; then
-    cd TrollSpeed.xarchive/Products/Applications
-    echo "📂 Entered Applications folder"
+# 🏗 Create Applications folder if not generated
+APP_PATH="TrollSpeed.xarchive/Products/Applications/TrollSpeed.app"
+if [ -d "$APP_PATH" ]; then
+    echo "📂 Found app: $APP_PATH"
 else
-    echo "⚠️ Applications folder not found — building manually."
-    mkdir -p TrollSpeed.xarchive/Products/Applications
-    mkdir -p TrollSpeed.xarchive/Products/Applications/TrollSpeed.app
-    cd TrollSpeed.xarchive/Products/Applications
+    echo "⚠️ Applications folder missing, creating manually..."
+    mkdir -p "$APP_PATH"
 fi
 
-# Remove existing signature if any
-codesign --remove-signature TrollSpeed.app 2>/dev/null || true
+# 🔧 Remove any previous signature
+codesign --remove-signature "$APP_PATH" 2>/dev/null || true
 
-cd ..
-
-# Rename folder to Payload for packaging
+# 🧱 Prepare Payload structure
+cd TrollSpeed.xarchive/Products || exit 1
 if [ -d "Applications" ]; then
     mv Applications Payload
 else
-    echo "⚠️ Applications folder missing, creating Payload manually."
+    echo "⚠️ No Applications folder found, creating new Payload..."
     mkdir -p Payload/TrollSpeed.app
 fi
 
-# Sign the app with ldid using entitlements
+# 🔏 Sign app (if entitlements exist)
 if [ -f "entitlements.plist" ]; then
     ldid -Sentitlements.plist Payload/TrollSpeed.app
+    echo "✅ Signed app with entitlements.plist"
 else
-    echo "⚠️ No entitlements.plist found — skipping signing."
+    echo "⚠️ entitlements.plist not found — skipping signing."
 fi
 
-# Fix permissions and package as .tipa
+# 🧰 Fix Info.plist permissions
 chmod 0644 Payload/TrollSpeed.app/Info.plist 2>/dev/null || true
+
+# 📦 Create .tipa file
+echo "📦 Packaging .tipa..."
 zip -qr TrollSpeed.tipa Payload
 
-# Move final build to packages folder
-cd ../..
+# 🗂 Move build output to main packages folder
+cd ../.. || exit 1
 mkdir -p packages
-mv TrollSpeed.xarchive/Products/TrollSpeed.tipa packages/TrollSpeed+AppIntents16_${VERSION}.tipa 2>/dev/null || true
+if [ -f "Products/TrollSpeed.tipa" ]; then
+    mv Products/TrollSpeed.tipa packages/TrollSpeed+AppIntents16_${VERSION}.tipa
+elif [ -f "TrollSpeed.xarchive/Products/TrollSpeed.tipa" ]; then
+    mv TrollSpeed.xarchive/Products/TrollSpeed.tipa packages/TrollSpeed+AppIntents16_${VERSION}.tipa
+else
+    echo "⚠️ .tipa file not found — skipping move."
+fi
 
-echo "✅ Build completed successfully: packages/TrollSpeed+AppIntents16_${VERSION}.tipa"
+# ✅ Final confirmation
+if [ -f "packages/TrollSpeed+AppIntents16_${VERSION}.tipa" ]; then
+    echo "✅ Build completed successfully!"
+    echo "📦 Output: packages/TrollSpeed+AppIntents16_${VERSION}.tipa"
+else
+    echo "❌ Build finished but .tipa file was not found."
+    exit 1
+fi
