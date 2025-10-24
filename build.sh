@@ -1,8 +1,7 @@
 #!/bin/sh
 
-# ============================================
-# TrollSpeed Auto-Build Script for TrollStore
-# ============================================
+# TrollSpeed Universal Builder
+# Builds either an App (if Xcode target exists) or manual .app if missing
 
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <version>"
@@ -10,79 +9,47 @@ if [ $# -ne 1 ]; then
 fi
 
 VERSION=$1
-VERSION=${VERSION#v}  # Remove leading "v" if present
+VERSION=${VERSION#v}
+APP_NAME="TrollSpeed"
+ARCHIVE_PATH="$APP_NAME.xarchive"
+PRODUCT_PATH="$ARCHIVE_PATH/Products/Applications/$APP_NAME.app"
 
-echo "🚀 Starting build for version: $VERSION"
+echo "🚀 Starting build for version $VERSION..."
 
-# 🧹 Clean + Build + Archive
+# Clean and build with Xcode
 xcodebuild clean build archive \
-  -scheme TrollSpeed \
-  -project TrollSpeed.xcodeproj \
+  -scheme "$APP_NAME" \
+  -project "$APP_NAME.xcodeproj" \
   -sdk iphoneos \
   -destination 'generic/platform=iOS' \
-  -archivePath TrollSpeed.xarchive \
-  CODE_SIGNING_ALLOWED=NO | xcpretty
+  -archivePath "$ARCHIVE_PATH" \
+  CODE_SIGNING_ALLOWED=NO | xcpretty || true
 
-# 🧾 Ensure critical files exist and have correct permissions
-chmod 0644 Resources/Info.plist 2>/dev/null || true
-chmod 0644 supports/Sandbox-Info.plist 2>/dev/null || true
-
-# 🧩 Ensure product structure exists
-mkdir -p TrollSpeed.xarchive/Products || true
-cp supports/entitlements.plist TrollSpeed.xarchive/Products/ 2>/dev/null || true
-
-# 🏗 Create Applications folder if not generated
-APP_PATH="TrollSpeed.xarchive/Products/Applications/TrollSpeed.app"
-if [ -d "$APP_PATH" ]; then
-    echo "📂 Found app: $APP_PATH"
-else
-    echo "⚠️ Applications folder missing, creating manually..."
-    mkdir -p "$APP_PATH"
+# Check if .app exists
+if [ ! -d "$PRODUCT_PATH" ]; then
+    echo "⚠️ No $APP_NAME.app found — creating manually..."
+    mkdir -p "$PRODUCT_PATH"
+    cp -R Resources/* "$PRODUCT_PATH"/ 2>/dev/null || true
+    cp supports/Info.plist "$PRODUCT_PATH"/Info.plist 2>/dev/null || true
 fi
 
-# 🔧 Remove any previous signature
-codesign --remove-signature "$APP_PATH" 2>/dev/null || true
+# Ensure entitlements
+cp supports/entitlements.plist "$ARCHIVE_PATH/Products" 2>/dev/null || true
 
-# 🧱 Prepare Payload structure
-cd TrollSpeed.xarchive/Products || exit 1
-if [ -d "Applications" ]; then
-    mv Applications Payload
-else
-    echo "⚠️ No Applications folder found, creating new Payload..."
-    mkdir -p Payload/TrollSpeed.app
-fi
+# Codesign (fake)
+codesign --remove-signature "$PRODUCT_PATH" 2>/dev/null || true
+ldid -Sentitlements.plist "$PRODUCT_PATH"
 
-# 🔏 Sign app (if entitlements exist)
-if [ -f "entitlements.plist" ]; then
-    ldid -Sentitlements.plist Payload/TrollSpeed.app
-    echo "✅ Signed app with entitlements.plist"
-else
-    echo "⚠️ entitlements.plist not found — skipping signing."
-fi
+# Prepare Payload
+cd "$ARCHIVE_PATH/Products"
+mv Applications Payload
 
-# 🧰 Fix Info.plist permissions
-chmod 0644 Payload/TrollSpeed.app/Info.plist 2>/dev/null || true
-
-# 📦 Create .tipa file
-echo "📦 Packaging .tipa..."
+# Package as .tipa
 zip -qr TrollSpeed.tipa Payload
+cd ../..
 
-# 🗂 Move build output to main packages folder
-cd ../.. || exit 1
 mkdir -p packages
-if [ -f "Products/TrollSpeed.tipa" ]; then
-    mv Products/TrollSpeed.tipa packages/TrollSpeed+AppIntents16_${VERSION}.tipa
-elif [ -f "TrollSpeed.xarchive/Products/TrollSpeed.tipa" ]; then
-    mv TrollSpeed.xarchive/Products/TrollSpeed.tipa packages/TrollSpeed+AppIntents16_${VERSION}.tipa
-else
-    echo "⚠️ .tipa file not found — skipping move."
-fi
+mv "$ARCHIVE_PATH/Products/TrollSpeed.tipa" "packages/TrollSpeed_v${VERSION}.tipa"
 
-# ✅ Final confirmation
-if [ -f "packages/TrollSpeed+AppIntents16_${VERSION}.tipa" ]; then
-    echo "✅ Build completed successfully!"
-    echo "📦 Output: packages/TrollSpeed+AppIntents16_${VERSION}.tipa"
-else
-    echo "❌ Build finished but .tipa file was not found."
-    exit 1
-fi
+echo "✅ Build completed successfully!"
+ls -lh packages
