@@ -25,8 +25,9 @@ jobs:
 
       - name: 🧰 Install Dependencies
         run: |
-          HOMEBREW_NO_AUTO_UPDATE=1 brew install ldid dpkg zip xcpretty
-          echo "✅ Installed ldid, dpkg, zip, and xcpretty"
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install ldid dpkg zip
+          sudo gem install xcpretty
+          echo "✅ Installed ldid, dpkg, zip, and xcpretty (via gem)"
 
       - name: ⚙️ Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
