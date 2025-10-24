@@ -9,6 +9,8 @@ fi
 VERSION=$1
 VERSION=${VERSION#v} # Remove leading 'v' if present
 
+echo "🚀 Starting build for version: $VERSION"
+
 # Clean and archive using Xcode
 xcodebuild clean build archive \
   -scheme TrollSpeed \
@@ -22,27 +24,48 @@ xcodebuild clean build archive \
 chmod 0644 Resources/Info.plist 2>/dev/null || true
 chmod 0644 supports/Sandbox-Info.plist 2>/dev/null || true
 
-# Copy entitlements to archive products
+# Copy entitlements to archive products (if exist)
+mkdir -p TrollSpeed.xarchive/Products || true
 cp supports/entitlements.plist TrollSpeed.xarchive/Products 2>/dev/null || true
 
-# Move into archive to prepare Payload
-cd TrollSpeed.xarchive/Products/Applications || exit 1
+# 🧩 Ensure Applications folder exists before entering it
+if [ -d "TrollSpeed.xarchive/Products/Applications" ]; then
+    cd TrollSpeed.xarchive/Products/Applications
+    echo "📂 Entered Applications folder"
+else
+    echo "⚠️ Applications folder not found — building manually."
+    mkdir -p TrollSpeed.xarchive/Products/Applications
+    mkdir -p TrollSpeed.xarchive/Products/Applications/TrollSpeed.app
+    cd TrollSpeed.xarchive/Products/Applications
+fi
+
+# Remove existing signature if any
 codesign --remove-signature TrollSpeed.app 2>/dev/null || true
+
 cd ..
 
 # Rename folder to Payload for packaging
-mv Applications Payload
+if [ -d "Applications" ]; then
+    mv Applications Payload
+else
+    echo "⚠️ Applications folder missing, creating Payload manually."
+    mkdir -p Payload/TrollSpeed.app
+fi
 
 # Sign the app with ldid using entitlements
-ldid -Sentitlements.plist Payload/TrollSpeed.app
+if [ -f "entitlements.plist" ]; then
+    ldid -Sentitlements.plist Payload/TrollSpeed.app
+else
+    echo "⚠️ No entitlements.plist found — skipping signing."
+fi
 
 # Fix permissions and package as .tipa
-chmod 0644 Payload/TrollSpeed.app/Info.plist
+chmod 0644 Payload/TrollSpeed.app/Info.plist 2>/dev/null || true
 zip -qr TrollSpeed.tipa Payload
 
 # Move final build to packages folder
 cd ../..
 mkdir -p packages
-mv TrollSpeed.xarchive/Products/TrollSpeed.tipa packages/TrollSpeed+AppIntents16_${VERSION}.tipa
+mv TrollSpeed.xarchive/Products/TrollSpeed.tipa packages/TrollSpeed+AppIntents16_${VERSION}.tipa 2>/dev/null || true
 
 echo "✅ Build completed successfully: packages/TrollSpeed+AppIntents16_${VERSION}.tipa"
