@@ -20,6 +20,17 @@
 
 #define PID_PATH "/var/mobile/Library/Caches/ch.xxtou.hudapp.pid"
 
+// ✅ Fix missing macro: ROOT_PATH_NS
+#ifndef ROOT_PATH_NS
+#define ROOT_PATH_NS(x) [NSString stringWithFormat:@"/var/jb%@", x]
+#endif
+
+#else
+// ✅ When NO_TROLL is defined (TrollStore build, no /var/jb)
+#define ROOT_PATH_NS(x) (x)
+#endif
+
+
 static __used
 NSString *mDeviceModel(void) {
     struct utsname systemInfo;
@@ -27,6 +38,7 @@ NSString *mDeviceModel(void) {
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
 }
 
+#if !NO_TROLL
 static __used
 void _HUDEventCallback(void *target, void *refcon, IOHIDServiceRef service, IOHIDEventRef event)
 {
@@ -91,12 +103,17 @@ void _HUDEventCallback(void *target, void *refcon, IOHIDServiceRef service, IOHI
 
                 NSInteger pointerId = [[[[rep handInfo] paths] firstObject] pathIdentity];
                 if (pointerId > 0)
-                    [TSEventFetcher receiveAXEventID:MIN(MAX(pointerId, 1), 98) atGlobalCoordinate:[rep location] withTouchPhase:phase inWindow:keyWindow onView:keyView];
+                    [TSEventFetcher receiveAXEventID:MIN(MAX(pointerId, 1), 98)
+                                   atGlobalCoordinate:[rep location]
+                                       withTouchPhase:phase
+                                            inWindow:keyWindow
+                                              onView:keyView];
             });
         }
     }
 }
 #endif
+
 
 int main(int argc, char *argv[])
 {
