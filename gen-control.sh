@@ -1,55 +1,70 @@
 #!/bin/sh
+set -e
 
-# This script generates the DEBIAN/control file and updates Info.plist for the Polin app.
+# ✅ Usage: ./gen-control.sh v1.0.0
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <version>"
     exit 1
 fi
 
 VERSION=$1
-VERSION=${VERSION#v} # Strip leading 'v' if present
+VERSION=${VERSION#v} # Remove leading 'v'
 
-# Create layout directory for Debian package
+echo "🧩 Generating Debian control files for version $VERSION..."
+
+# Ensure layout exists
 mkdir -p layout/DEBIAN
 
-# Write the control file
-cat > layout/DEBIAN/control << __EOF__
-Package: ch.xxtou.polin.jb
-Name: Polin JB
+# Write DEBIAN/control
+cat > layout/DEBIAN/control <<EOF
+Package: ch.xxtou.hudapp.jb
+Name: TrollSpeed JB
 Version: $VERSION
 Section: Tweaks
 Depends: firmware (>= 14.0)
 Architecture: iphoneos-arm
-Author: Shshsjsisjsj <support@polin.dev>
-Maintainer: Shshsjsisjsj <support@polin.dev>
-Description: Polin — Dynamic TrollStore & Jailbreak utility.
-__EOF__
+Author: Lessica <82flex@gmail.com>
+Maintainer: Lessica <82flex@gmail.com>
+Description: Troll your speed, but jailbroken version.
+EOF
 
-# Set proper permissions
 chmod 0644 layout/DEBIAN/control
 
-# Generate random build number
+# Create simple postinst script (optional)
+cat > layout/DEBIAN/postinst <<EOF
+#!/bin/sh
+echo "[TrollSpeed] Installed successfully (v$VERSION)"
+exit 0
+EOF
+
+chmod 0755 layout/DEBIAN/postinst
+
+# Random build string for CFBundleVersion
 RAND_BUILD_STR=$(openssl rand -hex 4)
 
-# Update app Info.plist and Sandbox Info.plist
+# Update Info.plist (if exists)
 if [ -f "$PWD/Resources/Info.plist" ]; then
-    defaults write "$PWD/Resources/Info.plist" CFBundleShortVersionString "$VERSION"
-    defaults write "$PWD/Resources/Info.plist" CFBundleVersion "$RAND_BUILD_STR"
-    plutil -convert xml1 "$PWD/Resources/Info.plist"
-    chmod 0644 "$PWD/Resources/Info.plist"
+    echo "📄 Updating Resources/Info.plist..."
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PWD/Resources/Info.plist" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$PWD/Resources/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RAND_BUILD_STR" "$PWD/Resources/Info.plist" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $RAND_BUILD_STR" "$PWD/Resources/Info.plist"
 fi
 
+# Update Sandbox-Info.plist (if exists)
 if [ -f "$PWD/supports/Sandbox-Info.plist" ]; then
-    defaults write "$PWD/supports/Sandbox-Info.plist" CFBundleShortVersionString "$VERSION"
-    defaults write "$PWD/supports/Sandbox-Info.plist" CFBundleVersion "$RAND_BUILD_STR"
-    plutil -convert xml1 "$PWD/supports/Sandbox-Info.plist"
-    chmod 0644 "$PWD/supports/Sandbox-Info.plist"
+    echo "📄 Updating supports/Sandbox-Info.plist..."
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PWD/supports/Sandbox-Info.plist" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$PWD/supports/Sandbox-Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RAND_BUILD_STR" "$PWD/supports/Sandbox-Info.plist" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $RAND_BUILD_STR" "$PWD/supports/Sandbox-Info.plist"
 fi
 
-# Update Xcode project version number
-XCODE_PROJ_PBXPROJ="$PWD/Polin.xcodeproj/project.pbxproj"
-if [ -f "$XCODE_PROJ_PBXPROJ" ]; then
-    sed -i '' "s/MARKETING_VERSION = .*;/MARKETING_VERSION = $VERSION;/g" "$XCODE_PROJ_PBXPROJ"
+# Update version inside Xcode project
+XCODE_PROJ="$PWD/TrollSpeed.xcodeproj/project.pbxproj"
+if [ -f "$XCODE_PROJ" ]; then
+    echo "🛠 Updating Xcode project version..."
+    sed -i.bak "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = $VERSION/" "$XCODE_PROJ" || true
 fi
 
-echo "✅ Generated DEBIAN/control and updated version info successfully!"
+echo "✅ Control and plist generation completed successfully."
