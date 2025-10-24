@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================
-# 🚀 TrollSpeed Build Script (For GitHub Actions + TrollStore)
+# 🚀 TrollSpeed Build Script (for GitHub Actions + TrollStore)
 # ==============================================================
 
 if [ $# -ne 1 ]; then
@@ -13,7 +13,6 @@ fi
 VERSION=$1
 VERSION=${VERSION#v}
 APP_NAME="TrollSpeed"
-
 ARCHIVE_PATH="$APP_NAME.xarchive"
 PRODUCT_PATH="$ARCHIVE_PATH/Products/Applications/$APP_NAME.app"
 
@@ -21,9 +20,8 @@ echo "🚀 Building $APP_NAME v$VERSION..."
 echo "==========================================="
 
 # ==============================================================
-# 🧹 Clean and archive (ignore Xcode failure, fallback manual)
+# 🧹 Clean and archive (try Xcode first)
 # ==============================================================
-
 xcodebuild clean build archive \
   -scheme "$APP_NAME" \
   -project "$APP_NAME.xcodeproj" \
@@ -37,11 +35,9 @@ mkdir -p "$PRODUCT_PATH"
 # ==============================================================
 # 🧩 Manual compilation fallback
 # ==============================================================
-
 if [ ! -f "$PRODUCT_PATH/$APP_NAME" ]; then
     echo "⚠️ No main binary found — compiling sources manually..."
     echo "🔍 Searching for .m / .mm / .cpp files in sources/"
-
     SRC_FILES=$(find "$PWD/sources" -type f \( -name "*.m" -o -name "*.mm" -o -name "*.cpp" \))
     COUNT=$(echo "$SRC_FILES" | wc -l)
     echo "📦 Found $COUNT source files."
@@ -51,7 +47,7 @@ if [ ! -f "$PRODUCT_PATH/$APP_NAME" ]; then
         exit 1
     fi
 
-    echo "🧠 Starting manual compile (using clang++)..."
+    echo "🧠 Starting manual compile (clang++)..."
     clang++ -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
         -arch arm64 \
         -std=c++17 \
@@ -60,6 +56,9 @@ if [ ! -f "$PRODUCT_PATH/$APP_NAME" ]; then
         -fvisibility=hidden \
         -fvisibility-inlines-hidden \
         -I"$PWD/sources" \
+        -I"$PWD/headers" \
+        -I"$PWD/libraries/headers" \
+        -I"$PWD/sources/headers" \
         -I"$PWD/sources/ImGui" \
         -I"$PWD/sources/Polin/ImGui" \
         -framework UIKit \
@@ -81,9 +80,8 @@ if [ ! -f "$PRODUCT_PATH/$APP_NAME" ]; then
 fi
 
 # ==============================================================
-# 🧾 Generate Info.plist if missing
+# 🧾 Ensure Info.plist exists
 # ==============================================================
-
 if [ ! -f "$PRODUCT_PATH/Info.plist" ]; then
     echo "📄 Generating Info.plist..."
 cat > "$PRODUCT_PATH/Info.plist" <<EOF
@@ -105,15 +103,13 @@ EOF
 fi
 
 # ==============================================================
-# 📦 Copy Resources and sign app
+# 📦 Copy resources & sign
 # ==============================================================
-
 echo "📂 Copying resources..."
 [ -d "Resources" ] && cp -R Resources "$PRODUCT_PATH"/
 [ -d "ImGui" ] && cp -R ImGui "$PRODUCT_PATH"/
 [ -d "supports" ] && cp -R supports "$PRODUCT_PATH"/
 
-# Copy entitlements (optional)
 cp supports/entitlements.plist "$ARCHIVE_PATH/Products" 2>/dev/null || true
 
 echo "🔏 Signing binary..."
@@ -126,9 +122,8 @@ if [ -f "$PRODUCT_PATH/$APP_NAME" ]; then
 fi
 
 # ==============================================================
-# 🧩 Package as .tipa for TrollStore
+# 🧩 Package as .tipa
 # ==============================================================
-
 echo "📦 Creating .tipa package..."
 cd "$ARCHIVE_PATH/Products"
 mv Applications Payload
