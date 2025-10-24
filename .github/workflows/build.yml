@@ -58,18 +58,23 @@ jobs:
             echo "⚠️ gen-control.sh not found."
           fi
 
-      # 🔧 إصلاح مسارات ImGui قبل البناء
-      - name: 🔧 Auto-fix ImGui paths
+      # 🧩 تصحيح شامل لمسارات ImGui داخل project.pbxproj
+      - name: 🔧 Auto-fix ImGui paths (recursive)
         run: |
-          echo "🔍 Checking and fixing ImGui paths..."
+          echo "🔍 Deep cleaning ImGui paths..."
           cd TrollSpeed
-          if [ -f TrollSpeed.xcodeproj/project.pbxproj ]; then
-            sed -i '' 's|\.\./\.\./Polin/Polin/ImGui/|\.\./Polin/ImGui/|g' TrollSpeed.xcodeproj/project.pbxproj
-            sed -i '' 's|\.\./Polin/Polin/ImGui/|\.\./Polin/ImGui/|g' TrollSpeed.xcodeproj/project.pbxproj
-            sed -i '' 's|Polin/Polin/Polin/ImGui/|Polin/ImGui/|g' TrollSpeed.xcodeproj/project.pbxproj
-            echo "✅ ImGui paths fixed automatically."
+          FILE="TrollSpeed.xcodeproj/project.pbxproj"
+
+          if [ -f "$FILE" ]; then
+            # إزالة كل التكرارات مثل Polin/Polin/.../ImGui ⇒ Polin/ImGui
+            perl -pi -e 's|(Polin/)+ImGui/|Polin/ImGui/|g' "$FILE"
+            perl -pi -e 's|\.\./(Polin/)+ImGui/|\.\./Polin/ImGui/|g' "$FILE"
+            perl -pi -e 's|\.\./\.\./(Polin/)+ImGui/|\.\./Polin/ImGui/|g' "$FILE"
+            echo "✅ All ImGui paths cleaned and normalized."
+            echo "🔎 Sample of updated paths:"
+            grep -i "ImGui" "$FILE" | head -10 || true
           else
-            echo "⚠️ project.pbxproj not found."
+            echo "⚠️ project.pbxproj not found!"
           fi
 
       - name: 🚀 Build .tipa (Xcode)
