@@ -58,6 +58,20 @@ jobs:
             echo "⚠️ gen-control.sh not found."
           fi
 
+      # 🔧 إصلاح مسارات ImGui قبل البناء
+      - name: 🔧 Auto-fix ImGui paths
+        run: |
+          echo "🔍 Checking and fixing ImGui paths..."
+          cd TrollSpeed
+          if [ -f TrollSpeed.xcodeproj/project.pbxproj ]; then
+            sed -i '' 's|\.\./\.\./Polin/Polin/ImGui/|\.\./Polin/ImGui/|g' TrollSpeed.xcodeproj/project.pbxproj
+            sed -i '' 's|\.\./Polin/Polin/ImGui/|\.\./Polin/ImGui/|g' TrollSpeed.xcodeproj/project.pbxproj
+            sed -i '' 's|Polin/Polin/Polin/ImGui/|Polin/ImGui/|g' TrollSpeed.xcodeproj/project.pbxproj
+            echo "✅ ImGui paths fixed automatically."
+          else
+            echo "⚠️ project.pbxproj not found."
+          fi
+
       - name: 🚀 Build .tipa (Xcode)
         run: |
           cd TrollSpeed
