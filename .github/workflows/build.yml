@@ -1,152 +1,96 @@
-name: Build TrollSpeed (.tipa / .deb)
+name: Build TrollSpeed (tipa / deb)
 
 on:
   push:
+    branches: [ "main" ]
     tags:
       - "v*.*.*"
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
 
 env:
-  XCODE_VERSION: '15.1'
+  XCODE_VERSION: "15.1"
 
 jobs:
   build:
     runs-on: macos-13
 
     steps:
-      - name: 🧩 Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           path: TrollSpeed
           submodules: recursive
 
-      - name: 🧰 Install Dependencies
+      - name: Install dependencies
         run: |
           HOMEBREW_NO_AUTO_UPDATE=1 brew install ldid dpkg zip
           sudo gem install xcpretty
-          echo "✅ Installed dependencies: ldid, dpkg, zip, xcpretty"
+          echo "Installed: ldid, dpkg, zip, xcpretty"
 
-      - name: ⚙️ Setup Xcode
+      - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
-      - name: 🧩 Auto-fix ImGui paths (optional)
+      - name: Make scripts executable
         run: |
           cd TrollSpeed
-          if grep -q "../../Polin/ImGui" TrollSpeed.xcodeproj/project.pbxproj; then
-            echo "🛠 Fixing ImGui paths..."
-            sed -i '' 's|\.\./\.\./Polin/ImGui|Polin/ImGui|g' TrollSpeed.xcodeproj/project.pbxproj
-          else
-            echo "✅ ImGui paths already correct."
-          fi
+          chmod +x build.sh || true
+          chmod +x gen-control.sh || true
+          echo "Scripts are executable"
 
-      - name: 🧱 Inject safe build.sh (auto-fix missing archive)
+      - name: Get version
+        id: version
         run: |
-          cd TrollSpeed
-          cat > build.sh <<'EOF'
-#!/bin/sh
+          VERSION_TAG=$(git describe --tags --always || echo "v1.0.0")
+          echo "VERSION=${VERSION_TAG}" >> $GITHUB_ENV
+          echo "Version detected: ${VERSION_TAG}"
 
-if [ $# -ne 1 ]; then
-    echo "Usage: $0 <version>"
-    exit 1
-fi
-
-VERSION=$1
-VERSION=${VERSION#v}
-echo "🚀 Starting build for version: $VERSION"
-
-xcodebuild clean build archive \
-  -scheme TrollSpeed \
-  -project TrollSpeed.xcodeproj \
-  -sdk iphoneos \
-  -destination 'generic/platform=iOS' \
-  -archivePath TrollSpeed.xarchive \
-  CODE_SIGNING_ALLOWED=NO | xcpretty
-
-chmod 0644 Resources/Info.plist 2>/dev/null || true
-chmod 0644 supports/Sandbox-Info.plist 2>/dev/null || true
-
-mkdir -p TrollSpeed.xarchive/Products || true
-cp supports/entitlements.plist TrollSpeed.xarchive/Products 2>/dev/null || true
-
-if [ -d "TrollSpeed.xarchive/Products/Applications" ]; then
-    cd TrollSpeed.xarchive/Products/Applications
-    echo "📂 Entered Applications folder"
-else
-    echo "⚠️ Applications folder not found — creating manually."
-    mkdir -p TrollSpeed.xarchive/Products/Applications/TrollSpeed.app
-    cd TrollSpeed.xarchive/Products/Applications
-fi
-
-codesign --remove-signature TrollSpeed.app 2>/dev/null || true
-cd ..
-
-if [ -d "Applications" ]; then
-    mv Applications Payload
-else
-    echo "⚠️ Applications folder missing, creating Payload manually."
-    mkdir -p Payload/TrollSpeed.app
-fi
-
-if [ -f "entitlements.plist" ]; then
-    ldid -Sentitlements.plist Payload/TrollSpeed.app
-else
-    echo "⚠️ No entitlements.plist found — skipping signing."
-fi
-
-chmod 0644 Payload/TrollSpeed.app/Info.plist 2>/dev/null || true
-zip -qr TrollSpeed.tipa Payload
-
-cd ../..
-mkdir -p packages
-mv TrollSpeed.xarchive/Products/TrollSpeed.tipa packages/TrollSpeed+AppIntents16_${VERSION}.tipa 2>/dev/null || true
-
-echo "✅ Build completed successfully: packages/TrollSpeed+AppIntents16_${VERSION}.tipa"
-EOF
-
-          chmod +x build.sh
-          echo "✅ build.sh updated successfully"
-
-      - name: 🧩 Generate DEB Control
+      - name: Generate DEB control (if script exists)
         run: |
           cd TrollSpeed
           if [ -f "gen-control.sh" ]; then
-            ./gen-control.sh ${{ github.ref_name }}
+            echo "Running gen-control.sh..."
+            ./gen-control.sh ${{ env.VERSION }}
           else
-            echo "⚠️ gen-control.sh not found, skipping DEB control generation."
+            echo "No gen-control.sh found, skipping."
           fi
 
-      - name: 🚀 Build .tipa (Xcode)
+      - name: Build TrollSpeed (Xcode)
         run: |
           cd TrollSpeed
-          ./build.sh ${{ github.ref_name }}
+          if [ -f "build.sh" ]; then
+            echo "Starting build..."
+            ./build.sh ${{ env.VERSION }}
+          else
+            echo "build.sh not found!"
+            exit 1
+          fi
 
-      - name: 🧾 Fix DEBIAN script permissions
+      - name: Fix DEBIAN script permissions
         run: |
           cd TrollSpeed
           if [ -d "layout/DEBIAN" ]; then
             chmod 755 layout/DEBIAN/* || true
-            echo "✅ Fixed DEBIAN script permissions"
+            echo "Fixed DEBIAN permissions"
           else
-            echo "⚠️ No DEBIAN folder found"
+            echo "No DEBIAN folder found"
           fi
 
-      - name: 📦 Package .deb (if DEBIAN exists)
+      - name: Package .deb (if exists)
         run: |
           cd TrollSpeed
           if [ -d "layout/DEBIAN" ]; then
             mkdir -p packages
-            dpkg-deb -b layout packages/TrollSpeed_${{ github.ref_name }}_arm64.deb
-            echo "✅ .deb package built successfully."
+            dpkg-deb -b layout packages/TrollSpeed_${{ env.VERSION }}_arm64.deb
+            echo ".deb package built successfully"
           else
-            echo "⚠️ layout/DEBIAN not found, skipping."
+            echo "No layout/DEBIAN folder — skipping"
           fi
 
-      - name: ☁️ Upload Artifacts
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: TrollSpeed_Packages
@@ -154,38 +98,37 @@ EOF
             TrollSpeed/packages/*.tipa
             TrollSpeed/packages/*.deb
 
-      - name: 🚀 Upload Release (if tagged)
-        uses: softprops/action-gh-release@v1
+      - name: Upload GitHub release (if tagged)
         if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          body: "🎯 TrollSpeed build finished successfully!"
-          generate_release_notes: true
+          body: "TrollSpeed build completed successfully"
           files: |
             TrollSpeed/packages/*.tipa
             TrollSpeed/packages/*.deb
 
-      - name: 🧾 Build Summary
+      - name: Build summary
         if: always()
         run: |
           echo "----------------------------------------"
-          echo "📦 Build Summary"
+          echo "Build Summary"
           echo "----------------------------------------"
           cd $GITHUB_WORKSPACE/TrollSpeed/packages || exit 0
 
           if ls *.tipa >/dev/null 2>&1; then
-            echo "✅ TrollStore build (.tipa) found:"
+            echo "✅ TrollStore build (.tipa):"
             ls -lh *.tipa
           else
             echo "⚠️ No .tipa file found."
           fi
 
           if ls *.deb >/dev/null 2>&1; then
-            echo "✅ Jailbreak build (.deb) found:"
+            echo "✅ Jailbreak build (.deb):"
             ls -lh *.deb
           else
             echo "⚠️ No .deb file found."
           fi
 
           echo "----------------------------------------"
-          echo "🏁 Build completed at $(date)"
+          echo "Workflow finished at $(date)"
